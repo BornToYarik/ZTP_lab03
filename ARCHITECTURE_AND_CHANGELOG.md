@@ -45,6 +45,19 @@ This document tracks all structural changes, architectural patterns, and enginee
   4. **Polish Defense & Presentation Guide (`PREZENTACJA_OBRONA_PL.md`)**:
      * Created a comprehensive Polish guide for presenting the project structure, architectural decisions, and live demo to the instructor.
 
+### [2026-11-20] Entry 3 — Polymorphic Event Serialization, Single-Active-Cart Lock Release & Cross-Tab UI Sync
+* **Changed**:
+  1. **Polymorphic JSON Serialization of Domain Events (`CartDomainEvent.cs`, `wwwroot/index.html`)**:
+     * Added `[JsonPolymorphic(TypeDiscriminatorPropertyName = "eventType")]` and `[JsonDerivedType]` attributes to `CartDomainEvent` so `System.Text.Json` includes the concrete `eventType` discriminator and all derived properties (`productName`, `unitPrice`, `quantity`, `quantityToRemove`, `userId`) when returning `IReadOnlyList<CartDomainEvent>` from `GET /api/carts/{cartId}/events`.
+     * Updated the Web UI Event Sourcing panel to render each event type (`CartCreatedEvent`, `ProductAddedToCartEvent`, `ProductRemovedFromCartEvent`, `CartCheckedOutEvent`, `CartExpiredEvent`) accurately.
+  2. **Automatic Lock Release When Replacing an Active Cart (`CreateCartUseCase.cs`, `GetCartUseCase.cs`)**:
+     * Updated `CreateCartCommandHandler` so that if a user creates a new cart while already owning an unclosed active cart, the previous active cart is automatically closed (`CartExpiredEvent`) and its reserved products are released via `IProductServiceClient.ReleaseProductReservationAsync`. This prevents a user from locking out products in orphaned carts.
+     * Added `GetActiveUserCartQuery` (`GET /api/carts/active`) so multiple browser tabs/devices for the same user automatically attach to their current active cart.
+  3. **Enhanced Web UI Feedback & Cross-Tab Synchronization (`wwwroot/index.html`)**:
+     * Added a visual CQRS Query Read-Model JSON inspector drawer triggered by the `🔍 Podgląd koszyka (CQRS Query)` button.
+     * Added a detailed per-device operational consistency report drawer triggered by the `⚡ Symuluj 3 urządzenia naraz (Telefon + Laptop + Tablet)` button.
+     * Added `BroadcastChannel('ztp_lab03_live_sync')` so opening two browser windows side-by-side automatically refreshes both windows in real time upon any action.
+
 ---
 
 ## 2. How Each Requirement & Architectural Pattern Works

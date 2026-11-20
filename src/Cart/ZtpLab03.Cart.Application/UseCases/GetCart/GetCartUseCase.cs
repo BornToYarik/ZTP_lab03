@@ -1,4 +1,5 @@
 using ZtpLab03.Cart.Application.DTOs;
+using ZtpLab03.Cart.Domain.Entities;
 using ZtpLab03.Cart.Domain.Ports;
 using ZtpLab03.SharedKernel.CQRS;
 using ZtpLab03.SharedKernel.Results;
@@ -56,5 +57,49 @@ public sealed class GetCartQueryHandler : IQueryHandler<GetCartQuery, Result<Car
         }
 
         return Result<CartDto>.Success(cart.ToDto());
+    }
+}
+
+/// <summary>
+/// CQRS Query that retrieves the currently active cart for a given user across any device/tab.
+/// </summary>
+public sealed record GetActiveUserCartQuery(string UserId) : IQuery<Result<CartDto>>;
+
+public sealed class GetActiveUserCartQueryHandler : IQueryHandler<GetActiveUserCartQuery, Result<CartDto>>
+{
+    private readonly ICartEventStore _eventStore;
+    private readonly TimeProvider _timeProvider;
+
+    public GetActiveUserCartQueryHandler(ICartEventStore eventStore, TimeProvider? timeProvider = null)
+    {
+        _eventStore = eventStore;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
+    public async Task<Result<CartDto>> HandleAsync(
+        GetActiveUserCartQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(query.UserId))
+        {
+            return Result<CartDto>.Failure("UserId is required.", ErrorType.Validation);
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var activeCartIds = await _eventStore.GetActiveCartIdsAsync(cancellationToken);
+
+        foreach (var cartId in activeCartIds)
+        {
+            var cart = await _eventStore.GetCartAsync(cartId, cancellationToken);
+            if (cart is not null &&
+                cart.Status == CartStatus.Active &&
+                !cart.IsExpired(nowUtc) &&
+                cart.IsOwnedBy(query.UserId))
+            {
+                return Result<CartDto>.Success(cart.ToDto());
+            }
+        }
+
+        return Result<CartDto>.Failure($"No active cart found for user '{query.UserId}'.", ErrorType.NotFound);
     }
 }

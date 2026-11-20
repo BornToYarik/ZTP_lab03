@@ -89,6 +89,22 @@ public sealed class CartsController : ControllerBase
     }
 
     /// <summary>
+    /// CQRS Query: Retrieve the currently active shopping cart for the specified user (if one exists).
+    /// Enables multi-tab / multi-device synchronization for the same user account.
+    /// </summary>
+    [HttpGet("active")]
+    public async Task<IActionResult> GetActiveUserCart(
+        [FromHeader(Name = "X-User-Id")] string? headerUserId,
+        [FromQuery] string? userId,
+        CancellationToken cancellationToken)
+    {
+        var resolvedUserId = ResolveUserId(headerUserId, userId);
+        var query = new GetActiveUserCartQuery(resolvedUserId);
+        var result = await _mediator.SendQueryAsync<GetActiveUserCartQuery, Result<CartDto>>(query, cancellationToken);
+        return result.ToActionResult(this);
+    }
+
+    /// <summary>
     /// Use Case 4 (Query): View the current cart contents and total price before checkout.
     /// </summary>
     [HttpGet("{cartId:guid}")]

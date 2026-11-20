@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ZtpLab03.Cart.Domain.Events;
 
 /// <summary>
@@ -6,6 +8,12 @@ namespace ZtpLab03.Cart.Domain.Events;
 /// additions and removals from multiple user devices are recorded sequentially without
 /// overwriting each other (solving the Lost Update problem and ensuring Operational Consistency).
 /// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "eventType")]
+[JsonDerivedType(typeof(CartCreatedEvent), nameof(CartCreatedEvent))]
+[JsonDerivedType(typeof(ProductAddedToCartEvent), nameof(ProductAddedToCartEvent))]
+[JsonDerivedType(typeof(ProductRemovedFromCartEvent), nameof(ProductRemovedFromCartEvent))]
+[JsonDerivedType(typeof(CartCheckedOutEvent), nameof(CartCheckedOutEvent))]
+[JsonDerivedType(typeof(CartExpiredEvent), nameof(CartExpiredEvent))]
 public abstract record CartDomainEvent(
     Guid CartId,
     DateTime OccurredAtUtc);

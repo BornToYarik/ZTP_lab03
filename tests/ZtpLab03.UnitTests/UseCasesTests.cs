@@ -226,6 +226,31 @@ public sealed class UseCasesTests
         Assert.Contains("Processing", notification.Message);
     }
 
+    [Fact]
+    public async Task CreatingNewCartForSameUser_AutomaticallyClosesPreviousCartAndReleasesProductLocks()
+    {
+        // Arrange: User creates Cart #1 and locks the only unit of LimitedGpuProductId (stock = 1)
+        var env = new TestEnvironment();
+        const string userId = "user-yarik-01";
+
+        var firstCart = (await env.Mediator.SendCommandAsync<CreateCartCommand, Result<CartDto>>(
+            new CreateCartCommand(userId))).Value!;
+
+        var addGpuToFirstCart = await env.Mediator.SendCommandAsync<AddProductToCartCommand, Result<CartDto>>(
+            new AddProductToCartCommand(firstCart.CartId, userId, ProductCatalogService.LimitedGpuProductId, 1));
+        Assert.True(addGpuToFirstCart.IsSuccess);
+
+        // Act: The SAME user creates Cart #2 without manually closing Cart #1
+        var secondCart = (await env.Mediator.SendCommandAsync<CreateCartCommand, Result<CartDto>>(
+            new CreateCartCommand(userId))).Value!;
+
+        // Assert: Cart #1 was automatically closed and its product reservation on LimitedGpuProductId was released,
+        // allowing the user to add LimitedGpuProductId into Cart #2!
+        var addGpuToSecondCart = await env.Mediator.SendCommandAsync<AddProductToCartCommand, Result<CartDto>>(
+            new AddProductToCartCommand(secondCart.CartId, userId, ProductCatalogService.LimitedGpuProductId, 1));
+        Assert.True(addGpuToSecondCart.IsSuccess);
+    }
+
     /// <summary>
     /// Self-contained in-memory test harness that wires up all Clean Architecture Use Cases
     /// and routes <see cref="HttpProductServiceClient"/> through an in-memory HTTP handler

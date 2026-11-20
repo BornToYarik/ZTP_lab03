@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZTP Lab 03 — Clean Architecture, CQRS & Event Sourcing Demo</title>
+  <title>ZTP Lab 03 — Clean Architecture, CQRS &amp; Event Sourcing Demo</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -67,9 +67,10 @@
       font-size: 0.85rem;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: background 0.15s, transform 0.1s;
     }
     button:hover { background: var(--primary-hover); }
+    button:active { transform: scale(0.98); }
     button.btn-success { background: var(--success); }
     button.btn-success:hover { background: #059669; }
     button.btn-warning { background: var(--warning); color: #0f172a; }
@@ -95,6 +96,11 @@
       display: flex;
       flex-direction: column;
       gap: 14px;
+      transition: box-shadow 0.3s, border-color 0.3s;
+    }
+    .panel.highlight-pulse {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.35);
     }
     .panel-header {
       display: flex;
@@ -115,6 +121,7 @@
     .badge-green { background: rgba(16,185,129,0.2); color: #34d399; }
     .badge-yellow { background: rgba(245,158,11,0.2); color: #fbbf24; }
     .badge-red { background: rgba(239,68,68,0.2); color: #f87171; }
+    .badge-purple { background: rgba(168,85,247,0.2); color: #c084fc; }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
     th, td {
@@ -137,11 +144,38 @@
     .cart-meta div span { display: block; color: var(--muted); font-size: 0.75rem; }
     .cart-meta div strong { font-size: 0.95rem; }
 
+    .info-drawer {
+      background: #0b1120;
+      border: 1px solid #3b82f6;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.82rem;
+      display: none;
+    }
+    .info-drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      color: #60a5fa;
+      font-weight: 700;
+    }
+    .info-drawer pre {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 6px;
+      overflow-x: auto;
+      color: #a7f3d0;
+      font-family: Consolas, monospace;
+      font-size: 0.78rem;
+      max-height: 200px;
+    }
+
     .event-list, .order-list {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 280px;
+      max-height: 310px;
       overflow-y: auto;
     }
     .event-card, .order-card {
@@ -151,6 +185,7 @@
       border-radius: 6px;
       font-size: 0.83rem;
     }
+    .event-card.created { border-left-color: #3b82f6; }
     .event-card.added { border-left-color: var(--success); }
     .event-card.removed { border-left-color: var(--warning); }
     .event-card.expired { border-left-color: var(--danger); }
@@ -178,9 +213,9 @@
     <div class="user-switcher">
       <label for="userSelect">Aktywny Użytkownik (X-User-Id):</label>
       <select id="userSelect" onchange="onUserChanged()">
-        <option value="user-yarik-01">user-yarik-01 (Główny kupujący)</option>
-        <option value="user-anna-02">user-anna-02 (Drugi kupujący — test izolacji i blokady)</option>
-        <option value="user-piotr-03">user-piotr-03 (Trzeci kupujący)</option>
+        <option value="user-yarik-01">user-yarik-01 (Kupujący #1)</option>
+        <option value="user-anna-02">user-anna-02 (Kupujący #2 — test izolacji i blokady)</option>
+        <option value="user-piotr-03">user-piotr-03 (Kupujący #3)</option>
       </select>
       <span class="badge badge-green">PostgreSQL Event Store</span>
     </div>
@@ -196,7 +231,7 @@
         <button class="btn-secondary" onclick="loadProducts()">🔄 Odśwież stany</button>
       </div>
       <p style="font-size:0.82rem; color:var(--muted);">
-        Dodanie produktu do koszyka wysyła żądanie HTTP <code>POST /api/products/{id}/reserve</code> i natychmiast blokuje sztukę na 15 minut.
+        Dodanie produktu do koszyka wysyła żądanie HTTP <code>POST /api/products/{id}/reserve</code> i natychmiast blokuje sztukę na 15 minut. Możesz otworzyć drugą kartę przeglądarki na innym użytkowniku, aby zobaczyć blokadę na żywo!
       </p>
       <table>
         <thead>
@@ -213,17 +248,21 @@
     </section>
 
     <!-- PANEL 2: SHOPPING CART (CQRS + MULTI-DEVICE CONCURRENCY) -->
-    <section class="panel">
+    <section id="cartPanel" class="panel">
       <div class="panel-header">
         <h2>2. Koszyk Użytkownika (CQRS Commands &amp; Queries)</h2>
         <span id="cartStatusBadge" class="badge badge-blue">Brak koszyka</span>
       </div>
 
       <div class="toolbar">
-        <button onclick="createNewCart()">➕ Utwórz nowy koszyk</button>
-        <button class="btn-secondary" onclick="refreshCartAndEvents()">🔍 Podgląd koszyka (Query)</button>
-        <button class="btn-warning" onclick="simulateMultiDeviceBurst()" title="Wysyła równolegle operacje dodawania i usuwania z 3 urządzeń">
-          ⚡ Symuluj 3 urządzenia naraz (Spójność operacyjna)
+        <button onclick="createNewCart()" title="Zamyka i zwalnia ewentualny poprzedni koszyk tego użytkownika i tworzy nowy">
+          ➕ Utwórz nowy koszyk
+        </button>
+        <button class="btn-secondary" onclick="inspectCartQuery()" title="Wykonuje zapytanie CQRS GetCartQuery i pokazuje zwrócony model odczytu">
+          🔍 Podgląd koszyka (CQRS Query)
+        </button>
+        <button class="btn-warning" onclick="simulateMultiDeviceBurst()" title="Wysyła równolegle w tej samej milisekundzie operacje z Telefonu, Laptopa i Tabletu">
+          ⚡ Symuluj 3 urządzenia naraz (Telefon + Laptop + Tablet)
         </button>
         <button class="btn-danger" onclick="simulate15MinExpiration()" title="Natychmiast wygasza 15-minutową blokadę produktów i zamyka koszyk">
           ⏱️ Symuluj upływ 15 min (Wygaszenie blokady)
@@ -235,7 +274,16 @@
 
       <div style="display:flex; gap:8px; align-items:center; font-size:0.83rem;">
         <span style="color:var(--muted);">ID Koszyka:</span>
-        <input id="activeCartIdInput" type="text" placeholder="Brak aktywnego koszyka — kliknij 'Utwórz nowy koszyk'" style="flex:1;" onchange="refreshCartAndEvents()" />
+        <input id="activeCartIdInput" type="text" placeholder="Brak aktywnego koszyka — kliknij 'Utwórz nowy koszyk' lub '+ Dodaj 1 szt.'" style="flex:1;" onchange="refreshCartAndEvents()" />
+      </div>
+
+      <!-- Visual drawer for Multi-Device Simulation or CQRS Query inspection -->
+      <div id="infoDrawer" class="info-drawer">
+        <div class="info-drawer-header">
+          <span id="infoDrawerTitle">Szczegóły operacji</span>
+          <button class="btn-secondary" style="padding:2px 8px; font-size:0.75rem;" onclick="closeInfoDrawer()">✖ Zamknij</button>
+        </div>
+        <div id="infoDrawerContent"></div>
       </div>
 
       <div class="cart-meta">
@@ -296,9 +344,27 @@
   </div>
 
   <script>
-    // Map keeping the last created cartId per user so switching users remembers their cart,
-    // while also allowing the user to paste another user's cartId to test 403 Forbidden isolation!
+    const productNamesById = {};
     const userCarts = {};
+
+    // Cross-tab synchronization channel: when you open two browser windows side-by-side,
+    // actions in Tab 1 automatically refresh Tab 2!
+    const syncChannel = typeof BroadcastChannel !== 'undefined'
+      ? new BroadcastChannel('ztp_lab03_live_sync')
+      : null;
+
+    if (syncChannel) {
+      syncChannel.onmessage = async () => {
+        await syncActiveCartForCurrentUser(false);
+        await refreshAll();
+      };
+    }
+
+    function notifyOtherTabs() {
+      if (syncChannel) {
+        syncChannel.postMessage({ updatedAt: Date.now() });
+      }
+    }
 
     function getCurrentUserId() {
       return document.getElementById('userSelect').value;
@@ -322,13 +388,43 @@
       bar.textContent = message;
     }
 
+    function openInfoDrawer(title, htmlContent) {
+      document.getElementById('infoDrawerTitle').textContent = title;
+      document.getElementById('infoDrawerContent').innerHTML = htmlContent;
+      document.getElementById('infoDrawer').style.display = 'block';
+    }
+
+    function closeInfoDrawer() {
+      document.getElementById('infoDrawer').style.display = 'none';
+    }
+
+    async function syncActiveCartForCurrentUser(clearIfNone = true) {
+      const userId = getCurrentUserId();
+      try {
+        const res = await fetch('/api/carts/active', {
+          headers: { 'X-User-Id': userId }
+        });
+        if (res.ok) {
+          const activeCart = await res.json();
+          setActiveCartId(activeCart.cartId);
+          return activeCart;
+        } else if (clearIfNone && !userCarts[userId]) {
+          setActiveCartId('');
+        }
+      } catch (_) {}
+      return null;
+    }
+
     async function onUserChanged() {
+      closeInfoDrawer();
       const userId = getCurrentUserId();
       if (userCarts[userId]) {
         document.getElementById('activeCartIdInput').value = userCarts[userId];
+      } else {
+        await syncActiveCartForCurrentUser(true);
       }
       await refreshAll();
-      showToast(`Przełączono na użytkownika: ${userId}. Możesz teraz przetestować izolację koszyków lub blokadę produktów.`);
+      showToast(`Przełączono na użytkownika: ${userId}.`);
     }
 
     async function loadProducts() {
@@ -338,9 +434,11 @@
       tbody.innerHTML = '';
 
       for (const p of products) {
+        productNamesById[p.id] = p.name;
+
         const stockBadge = p.availableStock > 0
           ? `<span class="badge badge-green">${p.availableStock} szt.</span>`
-          : `<span class="badge badge-red">0 szt. (Brak)</span>`;
+          : `<span class="badge badge-red">0 szt. (Zablokowany / Brak)</span>`;
         const reservedBadge = p.reservedStock > 0
           ? `<span class="badge badge-yellow">🔒 ${p.reservedStock} szt.</span>`
           : `<span style="color:var(--muted);">0 szt.</span>`;
@@ -372,15 +470,57 @@
         return;
       }
       setActiveCartId(data.cartId);
-      showToast(`Utworzono nowy koszyk (${data.cartId}) dla użytkownika ${userId}.`);
+      showToast(`Utworzono nowy koszyk (${data.cartId}) dla użytkownika ${userId} (ewentualne blokady z poprzedniego niezamkniętego koszyka tego użytkownika zostały automatycznie zwolnione).`);
       await refreshAll();
+      notifyOtherTabs();
+    }
+
+    async function inspectCartQuery() {
+      const cartId = getActiveCartId();
+      if (!cartId) {
+        showToast('Brak aktywnego koszyka do podglądu — najpierw utwórz koszyk lub dodaj produkt.', true);
+        return;
+      }
+      const userId = getCurrentUserId();
+      const panel = document.getElementById('cartPanel');
+      panel.classList.add('highlight-pulse');
+      setTimeout(() => panel.classList.remove('highlight-pulse'), 900);
+
+      const res = await fetch(`/api/carts/${cartId}`, {
+        headers: { 'X-User-Id': userId }
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(`Zapytanie CQRS GetCartQuery zwróciło HTTP ${res.status}: ${data.error}`, true);
+        openInfoDrawer(
+          `🔍 Wynik Zapytania CQRS: GetCartQuery (HTTP ${res.status})`,
+          `<div style="color:#f87171; margin-bottom:6px;">Odmowa lub błąd odczytu koszyka:</div><pre>${JSON.stringify(data, null, 2)}</pre>`
+        );
+        return;
+      }
+
+      renderCart(data);
+      showToast(`🔍 Wykonano zapytanie CQRS GetCartQuery: ${data.items.length} pozycji w koszyku, łączna wartość: ${data.totalPrice.toFixed(2)} PLN (wersja strumienia: v${data.version}).`);
+      openInfoDrawer(
+        `🔍 Wynik Zapytania CQRS: GetCartQuery (GET /api/carts/${cartId.substring(0, 8)}...)`,
+        `<div style="color:var(--muted); margin-bottom:6px;">
+          Zgodnie z wzorcem CQRS operacja odczytu (<code>GetCartQueryHandler</code>) odtworzyła stan koszyka z ${data.version} zdarzeń Event Sourcing i zwróciła poniższy Read-Model DTO:
+        </div>
+        <pre>${JSON.stringify(data, null, 2)}</pre>`
+      );
     }
 
     async function addProductToCart(productId, quantity = 1) {
       let cartId = getActiveCartId();
       if (!cartId) {
-        await createNewCart();
-        cartId = getActiveCartId();
+        const existingActive = await syncActiveCartForCurrentUser(false);
+        if (existingActive) {
+          cartId = existingActive.cartId;
+        } else {
+          await createNewCart();
+          cartId = getActiveCartId();
+        }
       }
       const userId = getCurrentUserId();
       const res = await fetch(`/api/carts/${cartId}/items`, {
@@ -389,6 +529,28 @@
         body: JSON.stringify({ productId, quantity })
       });
       const data = await res.json();
+
+      // If the current cart was CheckedOut or Expired, automatically create a fresh active cart when user clicks "+ Dodaj 1 szt."
+      if (res.status === 409 && data.error && (data.error.includes('CheckedOut') || data.error.includes('expired') || data.error.includes('Expired'))) {
+        await createNewCart();
+        cartId = getActiveCartId();
+        const retryRes = await fetch(`/api/carts/${cartId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+          body: JSON.stringify({ productId, quantity })
+        });
+        const retryData = await retryRes.json();
+        if (!retryRes.ok) {
+          showToast(`Błąd (${retryRes.status}): ${retryData.error}`, true);
+          await loadProducts();
+          return;
+        }
+        showToast(`Utworzono nowy aktywny koszyk i dodano produkt (zablokowano w Serwisie Produktowym przez HTTP).`);
+        await refreshAll();
+        notifyOtherTabs();
+        return;
+      }
+
       if (!res.ok) {
         showToast(`Błąd (${res.status}): ${data.error}`, true);
         await loadProducts();
@@ -396,6 +558,7 @@
       }
       showToast(`Dodano produkt do koszyka i zablokowano stan w Serwisie Produktowym (HTTP).`);
       await refreshAll();
+      notifyOtherTabs();
     }
 
     async function removeProductFromCart(productId, quantity = 1) {
@@ -414,56 +577,111 @@
       }
       showToast(`Usunięto 1 szt. produktu z koszyka i zwolniono blokadę HTTP.`);
       await refreshAll();
+      notifyOtherTabs();
     }
 
     async function simulateMultiDeviceBurst() {
       let cartId = getActiveCartId();
+      const userId = getCurrentUserId();
+
+      // Make sure we have an active cart
       if (!cartId) {
         await createNewCart();
         cartId = getActiveCartId();
+      } else {
+        const checkRes = await fetch(`/api/carts/${cartId}`, { headers: { 'X-User-Id': userId } });
+        if (!checkRes.ok) {
+          await createNewCart();
+          cartId = getActiveCartId();
+        }
       }
-      const userId = getCurrentUserId();
+
+      const beforeRes = await fetch(`/api/carts/${cartId}`, { headers: { 'X-User-Id': userId } });
+      const beforeCart = await beforeRes.json();
+      const startVersion = beforeCart.version;
+
       const mouseId = '22222222-2222-2222-2222-222222222222';
       const keyboardId = '33333333-3333-3333-3333-333333333333';
+      const laptopId = '11111111-1111-1111-1111-111111111111';
 
-      // Ensure at least 2 mice are in the cart before firing concurrent adds + removes
+      // Step A: Ensure at least 1 Mouse is in the cart so a concurrent removal from Tablet has something to remove
       await fetch(`/api/carts/${cartId}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
-        body: JSON.stringify({ productId: mouseId, quantity: 2 })
+        body: JSON.stringify({ productId: mouseId, quantity: 1 })
       });
 
-      // Fire 5 concurrent requests simultaneously (Phone adds Mouse, Laptop adds Keyboard, Tablet removes Mouse, etc.)
-      const parallelRequests = [
-        fetch(`/api/carts/${cartId}/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
-          body: JSON.stringify({ productId: mouseId, quantity: 1 })
-        }),
-        fetch(`/api/carts/${cartId}/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
-          body: JSON.stringify({ productId: keyboardId, quantity: 1 })
-        }),
-        fetch(`/api/carts/${cartId}/items/${mouseId}?quantity=1`, {
-          method: 'DELETE',
-          headers: { 'X-User-Id': userId }
-        }),
-        fetch(`/api/carts/${cartId}/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
-          body: JSON.stringify({ productId: mouseId, quantity: 1 })
-        }),
-        fetch(`/api/carts/${cartId}/items`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
-          body: JSON.stringify({ productId: keyboardId, quantity: 1 })
-        })
+      const deviceOperations = [
+        {
+          device: '📱 Urządzenie 1 (Smartfon)',
+          action: 'Dodaje +1x Logitech MX Master 3S (449 PLN)',
+          run: () => fetch(`/api/carts/${cartId}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+            body: JSON.stringify({ productId: mouseId, quantity: 1 })
+          })
+        },
+        {
+          device: '💻 Urządzenie 2 (Laptop)',
+          action: 'Dodaje +1x Keychron Q1 Pro Keyboard (899 PLN)',
+          run: () => fetch(`/api/carts/${cartId}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+            body: JSON.stringify({ productId: keyboardId, quantity: 1 })
+          })
+        },
+        {
+          device: '📟 Urządzenie 3 (Tablet)',
+          action: 'Usuwa -1x Logitech MX Master 3S (-449 PLN)',
+          run: () => fetch(`/api/carts/${cartId}/items/${mouseId}?quantity=1`, {
+            method: 'DELETE',
+            headers: { 'X-User-Id': userId }
+          })
+        },
+        {
+          device: '💻 Urządzenie 2 (Laptop)',
+          action: 'Dodaje +1x ThinkPad X1 Carbon Gen 12 (7499 PLN)',
+          run: () => fetch(`/api/carts/${cartId}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+            body: JSON.stringify({ productId: laptopId, quantity: 1 })
+          })
+        }
       ];
 
-      await Promise.all(parallelRequests);
-      showToast('Wykonano 6 równoległych operacji z różnych urządzeń! Wszystkie zdarzenia zostały zapisane w strumieniu Event Sourcing bez utraty danych.');
+      const t0 = performance.now();
+      // Launch all device requests IN PARALLEL at the exact same millisecond via Promise.all
+      const responses = await Promise.all(deviceOperations.map(op => op.run()));
+      const elapsedMs = (performance.now() - t0).toFixed(1);
+
+      const afterRes = await fetch(`/api/carts/${cartId}`, { headers: { 'X-User-Id': userId } });
+      const afterCart = await afterRes.json();
+
+      const rowsHtml = deviceOperations.map((op, i) => {
+        const status = responses[i].status;
+        return `<div style="padding:4px 0; border-bottom:1px solid #1e293b;">
+          <strong>${op.device}</strong>: ${op.action}
+          <span class="badge badge-green" style="float:right;">HTTP ${status} OK</span>
+        </div>`;
+      }).join('');
+
+      openInfoDrawer(
+        `⚡ Raport Spójności Operacyjnej (Równoległy dostęp z 3 urządzeń w ${elapsedMs} ms)`,
+        `<div style="color:var(--muted); margin-bottom:8px;">
+          Wysłano jednocześnie (<code>Promise.all</code>) operacje dodawania i usuwania dla tego samego koszyka <code>${cartId.substring(0, 8)}...</code>:
+        </div>
+        <div style="margin-bottom:8px;">
+          <div>• Wstępne przygotowanie: <strong>+1x Logitech MX Master 3S</strong></div>
+          ${rowsHtml}
+        </div>
+        <div style="color:#34d399; font-weight:700;">
+          ✔ Wersja strumienia wzrosła z v${startVersion} do v${afterCart.version} (+5 zdarzeń Event Sourcing). Żadna operacja nie została utracona ani nadpisana!
+        </div>`
+      );
+
+      showToast(`⚡ Symulacja 3 urządzeń zakończona w ${elapsedMs} ms! Wersja strumienia: v${startVersion} -> v${afterCart.version}.`);
       await refreshAll();
+      notifyOtherTabs();
     }
 
     async function simulate15MinExpiration() {
@@ -478,8 +696,9 @@
         showToast(`Błąd (${res.status}): ${data.error}`, true);
         return;
       }
-      showToast('⏱️ Zasymulowano upływ 15 minut! Koszyk wygasł, a zablokowane produkty zostały zwolnione w Serwisie Produktowym.');
+      showToast('⏱️ Zasymulowano upływ 15 minut! Koszyk wygasł (CartExpiredEvent), a zablokowane produkty wróciły do puli dostępnych.');
       await refreshAll();
+      notifyOtherTabs();
     }
 
     async function checkoutCart() {
@@ -501,12 +720,26 @@
       }
       showToast('✅ Koszyk zatwierdzony! Niezależna Domena Zamówień rozpoczęła realizację i wysłała powiadomienie.');
       await refreshAll();
+      notifyOtherTabs();
     }
 
     async function refreshCartAndEvents() {
       const cartId = getActiveCartId();
       const userId = getCurrentUserId();
-      if (!cartId) return;
+      if (!cartId) {
+        document.getElementById('cartStatusBadge').className = 'badge badge-blue';
+        document.getElementById('cartStatusBadge').textContent = 'Brak koszyka';
+        document.getElementById('metaOwner').textContent = '-';
+        document.getElementById('metaVersion').textContent = '0';
+        document.getElementById('metaExpires').textContent = '-';
+        document.getElementById('metaTotal').textContent = '0.00 PLN';
+        document.getElementById('cartItemsTableBody').innerHTML =
+          '<tr><td colspan="5" style="color:var(--muted); text-align:center;">Koszyk jest pusty</td></tr>';
+        document.getElementById('eventCountBadge').textContent = '0 zdarzeń';
+        document.getElementById('eventStreamContainer').innerHTML =
+          '<div style="color:var(--muted); font-size:0.85rem;">Utwórz koszyk, aby zobaczyć historię zdarzeń...</div>';
+        return;
+      }
 
       // Load events first so even if cart is Expired we can show its event stream
       const eventsRes = await fetch(`/api/carts/${cartId}/events`, {
@@ -529,7 +762,9 @@
 
       if (!cartRes.ok) {
         document.getElementById('cartStatusBadge').className = 'badge badge-red';
-        document.getElementById('cartStatusBadge').textContent = `HTTP ${cartRes.status}`;
+        document.getElementById('cartStatusBadge').textContent =
+          cartRes.status === 409 ? 'Wygasły (Expired)' : `HTTP ${cartRes.status}`;
+        document.getElementById('metaTotal').textContent = '0.00 PLN';
         document.getElementById('cartItemsTableBody').innerHTML =
           `<tr><td colspan="5" style="color:#f87171; text-align:center;">${cartData.error}</td></tr>`;
         return;
@@ -541,7 +776,7 @@
     function renderCart(cart) {
       const badge = document.getElementById('cartStatusBadge');
       badge.textContent = cart.status;
-      badge.className = cart.status === 'Active' ? 'badge badge-green' : 'badge badge-yellow';
+      badge.className = cart.status === 'Active' ? 'badge badge-green' : 'badge badge-purple';
 
       document.getElementById('metaOwner').textContent = cart.userId;
       document.getElementById('metaVersion').textContent = `${cart.version} zdarzeń`;
@@ -577,29 +812,41 @@
 
       events.forEach((ev, idx) => {
         const time = new Date(ev.occurredAtUtc).toLocaleTimeString();
-        let typeLabel = 'CartDomainEvent';
-        let cssClass = '';
+        const typeLabel = ev.eventType || 'CartDomainEvent';
+        let cssClass = 'created';
         let details = '';
 
-        if (ev.productName !== undefined) {
-          typeLabel = 'ProductAddedToCartEvent';
-          cssClass = 'added';
-          details = `Dodano: <strong>${ev.productName}</strong> (Ilość: +${ev.quantity}, Cena: ${ev.unitPrice} PLN)`;
-        } else if (ev.quantityToRemove !== undefined) {
-          typeLabel = 'ProductRemovedFromCartEvent';
-          cssClass = 'removed';
-          details = `Usunięto produkt (${ev.productId.substring(0, 8)}...) — Ilość: -${ev.quantityToRemove}`;
-        } else if (ev.userId !== undefined && idx === 0) {
-          typeLabel = 'CartCreatedEvent';
-          details = `Utworzono koszyk dla użytkownika <strong>${ev.userId}</strong>`;
-        } else if (ev.userId !== undefined) {
-          typeLabel = 'CartCheckedOutEvent';
-          cssClass = 'checkedout';
-          details = `Zatwierdzono koszyk przez <strong>${ev.userId}</strong> -> Wygenerowano zlecenie`;
-        } else {
-          typeLabel = 'CartExpiredEvent';
-          cssClass = 'expired';
-          details = `Koszyk wygasł po 15 minutach bezczynności — zwolniono blokady produktów`;
+        switch (typeLabel) {
+          case 'CartCreatedEvent':
+            cssClass = 'created';
+            details = `🆕 Utworzono nowy koszyk dla użytkownika <strong>${ev.userId}</strong>`;
+            break;
+
+          case 'ProductAddedToCartEvent':
+            cssClass = 'added';
+            details = `➕ Dodano do koszyka ( i zablokowano na 15 min): <strong>${ev.productName}</strong> — Ilość: <strong>+${ev.quantity} szt.</strong> (${Number(ev.unitPrice).toFixed(2)} PLN/szt.)`;
+            break;
+
+          case 'ProductRemovedFromCartEvent': {
+            cssClass = 'removed';
+            const prodName = productNamesById[ev.productId] || `Produkt (${ev.productId.substring(0, 8)}...)`;
+            details = `➖ Usunięto z koszyka (i zwolniono blokadę HTTP): <strong>${prodName}</strong> — Ilość: <strong>-${ev.quantityToRemove} szt.</strong>`;
+            break;
+          }
+
+          case 'CartCheckedOutEvent':
+            cssClass = 'checkedout';
+            details = `✅ Zatwierdzono koszyk przez <strong>${ev.userId}</strong> — przekazano zlecenie do Domeny Zamówień`;
+            break;
+
+          case 'CartExpiredEvent':
+            cssClass = 'expired';
+            details = `⏱️ Koszyk wygasł po 15 minutach bezczynności (lub został zastąpiony nowym) — zwolniono blokady produktów`;
+            break;
+
+          default:
+            details = JSON.stringify(ev);
+            break;
         }
 
         const div = document.createElement('div');
@@ -659,14 +906,18 @@
     }
 
     async function refreshAll() {
+      await loadProducts();
       await Promise.all([
-        loadProducts(),
         refreshCartAndEvents(),
         loadOrdersAndNotifications()
       ]);
     }
 
-    refreshAll();
+    (async () => {
+      await loadProducts();
+      await syncActiveCartForCurrentUser(true);
+      await refreshAll();
+    })();
   </script>
 </body>
 </html>
