@@ -1,0 +1,63 @@
+@HostAddress = http://localhost:5100
+@UserId = user-yarik-01
+@LaptopId = 11111111-1111-1111-1111-111111111111
+@MouseId = 22222222-2222-2222-2222-222222222222
+
+### 1. List available products from Product Service (over HTTP)
+GET {{HostAddress}}/api/products
+Accept: application/json
+
+### 2. Use Case 1 (Command): Create a new Shopping Cart
+# Automatically saves the returned cartId into Rider's global {{cartId}} variable!
+POST {{HostAddress}}/api/carts
+X-User-Id: {{UserId}}
+Content-Type: application/json
+
+{
+  "userId": "{{UserId}}"
+}
+
+> {%
+    client.global.set("cartId", response.body.cartId);
+%}
+
+### 3. Use Case 2 (Command): Add 2 Laptops to Cart (reserves stock for 15 minutes over HTTP)
+POST {{HostAddress}}/api/carts/{{cartId}}/items
+X-User-Id: {{UserId}}
+Content-Type: application/json
+
+{
+  "productId": "{{LaptopId}}",
+  "quantity": 2
+}
+
+### 4. Use Case 4 (Query): View Cart Contents and Total Value
+GET {{HostAddress}}/api/carts/{{cartId}}
+X-User-Id: {{UserId}}
+Accept: application/json
+
+### 5. View Event Sourcing Stream for the Cart
+GET {{HostAddress}}/api/carts/{{cartId}}/events
+X-User-Id: {{UserId}}
+Accept: application/json
+
+### 6. Use Case 3 (Command): Remove 1 Laptop from Cart (releases 1 unit of stock lock over HTTP, 1 remains)
+DELETE {{HostAddress}}/api/carts/{{cartId}}/items/{{LaptopId}}?quantity=1
+X-User-Id: {{UserId}}
+
+### 7. Use Case 5 (Command): Checkout Cart (confirms cart & triggers Order Domain processing + notification)
+POST {{HostAddress}}/api/carts/{{cartId}}/checkout
+X-User-Id: {{UserId}}
+Content-Type: application/json
+
+{}
+
+### 8. Order Domain (Query): Check User Orders
+GET {{HostAddress}}/api/orders
+X-User-Id: {{UserId}}
+Accept: application/json
+
+### 9. Order Domain (Query): Check User Notifications (+0.25 criterion)
+GET {{HostAddress}}/api/orders/notifications
+X-User-Id: {{UserId}}
+Accept: application/json

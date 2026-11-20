@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZTP Lab 03 — Clean Architecture, CQRS & Event Sourcing Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-alt: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 20px;
+    }
+    header {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .title-block h1 { font-size: 1.35rem; color: #60a5fa; }
+    .title-block p { font-size: 0.85rem; color: var(--muted); }
+    .user-switcher {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #0f172a;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .user-switcher label { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+    select, input {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.9rem;
+    }
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 13px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--primary-hover); }
+    button.btn-success { background: var(--success); }
+    button.btn-success:hover { background: #059669; }
+    button.btn-warning { background: var(--warning); color: #0f172a; }
+    button.btn-warning:hover { background: #d97706; }
+    button.btn-danger { background: var(--danger); }
+    button.btn-danger:hover { background: #dc2626; }
+    button.btn-secondary { background: var(--panel-alt); }
+    button.btn-secondary:hover { background: #475569; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1.2fr;
+      gap: 20px;
+    }
+    @media (max-width: 1024px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+    .panel-header h2 { font-size: 1.05rem; color: #93c5fd; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .badge-blue { background: rgba(59,130,246,0.2); color: #60a5fa; }
+    .badge-green { background: rgba(16,185,129,0.2); color: #34d399; }
+    .badge-yellow { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .badge-red { background: rgba(239,68,68,0.2); color: #f87171; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; }
+
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+    .cart-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      background: #0f172a;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+    }
+    .cart-meta div span { display: block; color: var(--muted); font-size: 0.75rem; }
+    .cart-meta div strong { font-size: 0.95rem; }
+
+    .event-list, .order-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .event-card, .order-card {
+      background: #0f172a;
+      border-left: 4px solid var(--primary);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 0.83rem;
+    }
+    .event-card.added { border-left-color: var(--success); }
+    .event-card.removed { border-left-color: var(--warning); }
+    .event-card.expired { border-left-color: var(--danger); }
+    .event-card.checkedout { border-left-color: #a855f7; }
+
+    #toast-bar {
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      display: none;
+      font-weight: 600;
+    }
+    .toast-ok { background: rgba(16,185,129,0.2); border: 1px solid var(--success); color: #6ee7b7; }
+    .toast-err { background: rgba(239,68,68,0.2); border: 1px solid var(--danger); color: #fca5a5; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-block">
+      <h1>ZTP Lab 03 — Clean Architecture + CQRS + Event Sourcing + PostgreSQL</h1>
+      <p>Panel demonstracyjny: Domeny Koszyka, Produktów (HTTP + Blokada 15 min) oraz Zamówień i Powiadomień</p>
+    </div>
+    <div class="user-switcher">
+      <label for="userSelect">Aktywny Użytkownik (X-User-Id):</label>
+      <select id="userSelect" onchange="onUserChanged()">
+        <option value="user-yarik-01">user-yarik-01 (Główny kupujący)</option>
+        <option value="user-anna-02">user-anna-02 (Drugi kupujący — test izolacji i blokady)</option>
+        <option value="user-piotr-03">user-piotr-03 (Trzeci kupujący)</option>
+      </select>
+      <span class="badge badge-green">PostgreSQL Event Store</span>
+    </div>
+  </header>
+
+  <div id="toast-bar"></div>
+
+  <div class="grid">
+    <!-- PANEL 1: PRODUCT SERVICE (HTTP + 15-MIN LOCK) -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>1. Serwis Produktowy (Komunikacja HTTP + Blokada 15 min)</h2>
+        <button class="btn-secondary" onclick="loadProducts()">🔄 Odśwież stany</button>
+      </div>
+      <p style="font-size:0.82rem; color:var(--muted);">
+        Dodanie produktu do koszyka wysyła żądanie HTTP <code>POST /api/products/{id}/reserve</code> i natychmiast blokuje sztukę na 15 minut.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Produkt</th>
+            <th>Cena</th>
+            <th>Dostępne</th>
+            <th>Zablokowane</th>
+            <th>Akcja (CQRS Command)</th>
+          </tr>
+        </thead>
+        <tbody id="productsTableBody"></tbody>
+      </table>
+    </section>
+
+    <!-- PANEL 2: SHOPPING CART (CQRS + MULTI-DEVICE CONCURRENCY) -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>2. Koszyk Użytkownika (CQRS Commands &amp; Queries)</h2>
+        <span id="cartStatusBadge" class="badge badge-blue">Brak koszyka</span>
+      </div>
+
+      <div class="toolbar">
+        <button onclick="createNewCart()">➕ Utwórz nowy koszyk</button>
+        <button class="btn-secondary" onclick="refreshCartAndEvents()">🔍 Podgląd koszyka (Query)</button>
+        <button class="btn-warning" onclick="simulateMultiDeviceBurst()" title="Wysyła równolegle operacje dodawania i usuwania z 3 urządzeń">
+          ⚡ Symuluj 3 urządzenia naraz (Spójność operacyjna)
+        </button>
+        <button class="btn-danger" onclick="simulate15MinExpiration()" title="Natychmiast wygasza 15-minutową blokadę produktów i zamyka koszyk">
+          ⏱️ Symuluj upływ 15 min (Wygaszenie blokady)
+        </button>
+        <button class="btn-success" onclick="checkoutCart()">
+          ✅ Zatwierdź koszyk (Checkout)
+        </button>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center; font-size:0.83rem;">
+        <span style="color:var(--muted);">ID Koszyka:</span>
+        <input id="activeCartIdInput" type="text" placeholder="Brak aktywnego koszyka — kliknij 'Utwórz nowy koszyk'" style="flex:1;" onchange="refreshCartAndEvents()" />
+      </div>
+
+      <div class="cart-meta">
+        <div><span>Właściciel (UserId)</span><strong id="metaOwner">-</strong></div>
+        <div><span>Wersja Strumienia (Events)</span><strong id="metaVersion">0</strong></div>
+        <div><span>Wygasa o (Blokada 15 min)</span><strong id="metaExpires">-</strong></div>
+        <div><span>Łączna Wartość</span><strong id="metaTotal" style="color:#34d399;">0.00 PLN</strong></div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Produkt w koszyku</th>
+            <th>Cena jedn.</th>
+            <th>Ilość</th>
+            <th>Suma</th>
+            <th>Usuń (Command)</th>
+          </tr>
+        </thead>
+        <tbody id="cartItemsTableBody">
+          <tr><td colspan="5" style="color:var(--muted); text-align:center;">Koszyk jest pusty</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- PANEL 3: EVENT SOURCING STREAM -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>3. Strumień Zdarzeń Event Sourcing (Tabela <code>cart_events</code>)</h2>
+        <span id="eventCountBadge" class="badge badge-blue">0 zdarzeń</span>
+      </div>
+      <p style="font-size:0.82rem; color:var(--muted);">
+        Stan koszyka nie jest nadpisywany (brak <em>Lost Updates</em>). Każda operacja z dowolnego urządzenia dopisuje niemutowalne zdarzenie do strumienia:
+      </p>
+      <div id="eventStreamContainer" class="event-list">
+        <div style="color:var(--muted); font-size:0.85rem;">Utwórz koszyk, aby zobaczyć historię zdarzeń...</div>
+      </div>
+    </section>
+
+    <!-- PANEL 4: INDEPENDENT ORDER DOMAIN & NOTIFICATIONS -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>4. Niezależna Domena Zamówień i Powiadomienia (+0.25)</h2>
+        <button class="btn-secondary" onclick="loadOrdersAndNotifications()">🔄 Odśwież</button>
+      </div>
+      <p style="font-size:0.82rem; color:var(--muted);">
+        Po zatwierdzeniu koszyka publikowane jest zdarzenie <code>CartCheckedOutIntegrationEvent</code>. Niezależna domena Zamówień rozpoczyna realizację i wysyła powiadomienie:
+      </p>
+      <div>
+        <h3 style="font-size:0.9rem; color:#fbbf24; margin-bottom:6px;">🔔 Powiadomienia Użytkownika:</h3>
+        <div id="notificationsContainer" class="order-list"></div>
+      </div>
+      <div style="margin-top:8px;">
+        <h3 style="font-size:0.9rem; color:#34d399; margin-bottom:6px;">📦 Zamówienia w realizacji:</h3>
+        <div id="ordersContainer" class="order-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Map keeping the last created cartId per user so switching users remembers their cart,
+    // while also allowing the user to paste another user's cartId to test 403 Forbidden isolation!
+    const userCarts = {};
+
+    function getCurrentUserId() {
+      return document.getElementById('userSelect').value;
+    }
+
+    function getActiveCartId() {
+      return document.getElementById('activeCartIdInput').value.trim();
+    }
+
+    function setActiveCartId(cartId) {
+      document.getElementById('activeCartIdInput').value = cartId || '';
+      if (cartId) {
+        userCarts[getCurrentUserId()] = cartId;
+      }
+    }
+
+    function showToast(message, isError = false) {
+      const bar = document.getElementById('toast-bar');
+      bar.style.display = 'block';
+      bar.className = isError ? 'toast-err' : 'toast-ok';
+      bar.textContent = message;
+    }
+
+    async function onUserChanged() {
+      const userId = getCurrentUserId();
+      if (userCarts[userId]) {
+        document.getElementById('activeCartIdInput').value = userCarts[userId];
+      }
+      await refreshAll();
+      showToast(`Przełączono na użytkownika: ${userId}. Możesz teraz przetestować izolację koszyków lub blokadę produktów.`);
+    }
+
+    async function loadProducts() {
+      const res = await fetch('/api/products');
+      const products = await res.json();
+      const tbody = document.getElementById('productsTableBody');
+      tbody.innerHTML = '';
+
+      for (const p of products) {
+        const stockBadge = p.availableStock > 0
+          ? `<span class="badge badge-green">${p.availableStock} szt.</span>`
+          : `<span class="badge badge-red">0 szt. (Brak)</span>`;
+        const reservedBadge = p.reservedStock > 0
+          ? `<span class="badge badge-yellow">🔒 ${p.reservedStock} szt.</span>`
+          : `<span style="color:var(--muted);">0 szt.</span>`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${p.name}</strong></td>
+          <td>${p.price.toFixed(2)} PLN</td>
+          <td>${stockBadge}</td>
+          <td>${reservedBadge}</td>
+          <td>
+            <button onclick="addProductToCart('${p.id}')">+ Dodaj 1 szt.</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function createNewCart() {
+      const userId = getCurrentUserId();
+      const res = await fetch('/api/carts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Błąd tworzenia koszyka', true);
+        return;
+      }
+      setActiveCartId(data.cartId);
+      showToast(`Utworzono nowy koszyk (${data.cartId}) dla użytkownika ${userId}.`);
+      await refreshAll();
+    }
+
+    async function addProductToCart(productId, quantity = 1) {
+      let cartId = getActiveCartId();
+      if (!cartId) {
+        await createNewCart();
+        cartId = getActiveCartId();
+      }
+      const userId = getCurrentUserId();
+      const res = await fetch(`/api/carts/${cartId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+        body: JSON.stringify({ productId, quantity })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(`Błąd (${res.status}): ${data.error}`, true);
+        await loadProducts();
+        return;
+      }
+      showToast(`Dodano produkt do koszyka i zablokowano stan w Serwisie Produktowym (HTTP).`);
+      await refreshAll();
+    }
+
+    async function removeProductFromCart(productId, quantity = 1) {
+      const cartId = getActiveCartId();
+      if (!cartId) return;
+      const userId = getCurrentUserId();
+
+      const res = await fetch(`/api/carts/${cartId}/items/${productId}?quantity=${quantity}`, {
+        method: 'DELETE',
+        headers: { 'X-User-Id': userId }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(`Błąd (${res.status}): ${data.error}`, true);
+        return;
+      }
+      showToast(`Usunięto 1 szt. produktu z koszyka i zwolniono blokadę HTTP.`);
+      await refreshAll();
+    }
+
+    async function simulateMultiDeviceBurst() {
+      let cartId = getActiveCartId();
+      if (!cartId) {
+        await createNewCart();
+        cartId = getActiveCartId();
+      }
+      const userId = getCurrentUserId();
+      const mouseId = '22222222-2222-2222-2222-222222222222';
+      const keyboardId = '33333333-3333-3333-3333-333333333333';
+
+      // Ensure at least 2 mice are in the cart before firing concurrent adds + removes
+      await fetch(`/api/carts/${cartId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+        body: JSON.stringify({ productId: mouseId, quantity: 2 })
+      });
+
+      // Fire 5 concurrent requests simultaneously (Phone adds Mouse, Laptop adds Keyboard, Tablet removes Mouse, etc.)
+      const parallelRequests = [
+        fetch(`/api/carts/${cartId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+          body: JSON.stringify({ productId: mouseId, quantity: 1 })
+        }),
+        fetch(`/api/carts/${cartId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+          body: JSON.stringify({ productId: keyboardId, quantity: 1 })
+        }),
+        fetch(`/api/carts/${cartId}/items/${mouseId}?quantity=1`, {
+          method: 'DELETE',
+          headers: { 'X-User-Id': userId }
+        }),
+        fetch(`/api/carts/${cartId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+          body: JSON.stringify({ productId: mouseId, quantity: 1 })
+        }),
+        fetch(`/api/carts/${cartId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+          body: JSON.stringify({ productId: keyboardId, quantity: 1 })
+        })
+      ];
+
+      await Promise.all(parallelRequests);
+      showToast('Wykonano 6 równoległych operacji z różnych urządzeń! Wszystkie zdarzenia zostały zapisane w strumieniu Event Sourcing bez utraty danych.');
+      await refreshAll();
+    }
+
+    async function simulate15MinExpiration() {
+      const cartId = getActiveCartId();
+      if (!cartId) {
+        showToast('Najpierw utwórz koszyk i dodaj produkt.', true);
+        return;
+      }
+      const res = await fetch(`/api/carts/${cartId}/simulate-timeout`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(`Błąd (${res.status}): ${data.error}`, true);
+        return;
+      }
+      showToast('⏱️ Zasymulowano upływ 15 minut! Koszyk wygasł, a zablokowane produkty zostały zwolnione w Serwisie Produktowym.');
+      await refreshAll();
+    }
+
+    async function checkoutCart() {
+      const cartId = getActiveCartId();
+      if (!cartId) {
+        showToast('Najpierw utwórz koszyk i dodaj produkt.', true);
+        return;
+      }
+      const userId = getCurrentUserId();
+      const res = await fetch(`/api/carts/${cartId}/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(`Błąd (${res.status}): ${data.error}`, true);
+        return;
+      }
+      showToast('✅ Koszyk zatwierdzony! Niezależna Domena Zamówień rozpoczęła realizację i wysłała powiadomienie.');
+      await refreshAll();
+    }
+
+    async function refreshCartAndEvents() {
+      const cartId = getActiveCartId();
+      const userId = getCurrentUserId();
+      if (!cartId) return;
+
+      // Load events first so even if cart is Expired we can show its event stream
+      const eventsRes = await fetch(`/api/carts/${cartId}/events`, {
+        headers: { 'X-User-Id': userId }
+      });
+
+      if (eventsRes.ok) {
+        const events = await eventsRes.json();
+        renderEvents(events);
+      } else {
+        const err = await eventsRes.json();
+        document.getElementById('eventStreamContainer').innerHTML =
+          `<div style="color:#f87171;">Brak dostępu do strumienia (${eventsRes.status}): ${err.error}</div>`;
+      }
+
+      const cartRes = await fetch(`/api/carts/${cartId}`, {
+        headers: { 'X-User-Id': userId }
+      });
+      const cartData = await cartRes.json();
+
+      if (!cartRes.ok) {
+        document.getElementById('cartStatusBadge').className = 'badge badge-red';
+        document.getElementById('cartStatusBadge').textContent = `HTTP ${cartRes.status}`;
+        document.getElementById('cartItemsTableBody').innerHTML =
+          `<tr><td colspan="5" style="color:#f87171; text-align:center;">${cartData.error}</td></tr>`;
+        return;
+      }
+
+      renderCart(cartData);
+    }
+
+    function renderCart(cart) {
+      const badge = document.getElementById('cartStatusBadge');
+      badge.textContent = cart.status;
+      badge.className = cart.status === 'Active' ? 'badge badge-green' : 'badge badge-yellow';
+
+      document.getElementById('metaOwner').textContent = cart.userId;
+      document.getElementById('metaVersion').textContent = `${cart.version} zdarzeń`;
+      document.getElementById('metaExpires').textContent = new Date(cart.expiresAtUtc).toLocaleTimeString();
+      document.getElementById('metaTotal').textContent = `${cart.totalPrice.toFixed(2)} PLN`;
+
+      const tbody = document.getElementById('cartItemsTableBody');
+      if (!cart.items || cart.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted); text-align:center;">Koszyk jest pusty</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      for (const item of cart.items) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${item.productName}</strong></td>
+          <td>${item.unitPrice.toFixed(2)} PLN</td>
+          <td><span class="badge badge-blue">${item.quantity} szt.</span></td>
+          <td><strong>${item.lineTotal.toFixed(2)} PLN</strong></td>
+          <td>
+            <button class="btn-danger" onclick="removeProductFromCart('${item.productId}', 1)">- Usuń 1 szt.</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderEvents(events) {
+      document.getElementById('eventCountBadge').textContent = `${events.length} zdarzeń`;
+      const container = document.getElementById('eventStreamContainer');
+      container.innerHTML = '';
+
+      events.forEach((ev, idx) => {
+        const time = new Date(ev.occurredAtUtc).toLocaleTimeString();
+        let typeLabel = 'CartDomainEvent';
+        let cssClass = '';
+        let details = '';
+
+        if (ev.productName !== undefined) {
+          typeLabel = 'ProductAddedToCartEvent';
+          cssClass = 'added';
+          details = `Dodano: <strong>${ev.productName}</strong> (Ilość: +${ev.quantity}, Cena: ${ev.unitPrice} PLN)`;
+        } else if (ev.quantityToRemove !== undefined) {
+          typeLabel = 'ProductRemovedFromCartEvent';
+          cssClass = 'removed';
+          details = `Usunięto produkt (${ev.productId.substring(0, 8)}...) — Ilość: -${ev.quantityToRemove}`;
+        } else if (ev.userId !== undefined && idx === 0) {
+          typeLabel = 'CartCreatedEvent';
+          details = `Utworzono koszyk dla użytkownika <strong>${ev.userId}</strong>`;
+        } else if (ev.userId !== undefined) {
+          typeLabel = 'CartCheckedOutEvent';
+          cssClass = 'checkedout';
+          details = `Zatwierdzono koszyk przez <strong>${ev.userId}</strong> -> Wygenerowano zlecenie`;
+        } else {
+          typeLabel = 'CartExpiredEvent';
+          cssClass = 'expired';
+          details = `Koszyk wygasł po 15 minutach bezczynności — zwolniono blokady produktów`;
+        }
+
+        const div = document.createElement('div');
+        div.className = `event-card ${cssClass}`;
+        div.innerHTML = `
+          <div style="display:flex; justify-content:space-between; color:var(--muted); font-size:0.75rem;">
+            <span><strong>v${idx + 1}</strong> • ${typeLabel}</span>
+            <span>${time}</span>
+          </div>
+          <div style="margin-top:4px;">${details}</div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function loadOrdersAndNotifications() {
+      const userId = getCurrentUserId();
+
+      const [ordersRes, notifRes] = await Promise.all([
+        fetch('/api/orders', { headers: { 'X-User-Id': userId } }),
+        fetch('/api/orders/notifications', { headers: { 'X-User-Id': userId } })
+      ]);
+
+      const notifContainer = document.getElementById('notificationsContainer');
+      if (notifRes.ok) {
+        const notifs = await notifRes.json();
+        if (notifs.length === 0) {
+          notifContainer.innerHTML = '<div style="color:var(--muted); font-size:0.83rem;">Brak powiadomień dla tego użytkownika.</div>';
+        } else {
+          notifContainer.innerHTML = notifs.map(n => `
+            <div class="order-card" style="border-left-color:var(--warning);">
+              <div style="font-size:0.75rem; color:var(--muted);">${new Date(n.sentAtUtc).toLocaleTimeString()} • Zamówienie ${n.orderId.substring(0, 8)}...</div>
+              <div>🔔 ${n.message}</div>
+            </div>
+          `).join('');
+        }
+      }
+
+      const ordersContainer = document.getElementById('ordersContainer');
+      if (ordersRes.ok) {
+        const orders = await ordersRes.json();
+        if (orders.length === 0) {
+          ordersContainer.innerHTML = '<div style="color:var(--muted); font-size:0.83rem;">Brak zamówień dla tego użytkownika.</div>';
+        } else {
+          ordersContainer.innerHTML = orders.map(o => `
+            <div class="order-card" style="border-left-color:var(--success);">
+              <div style="display:flex; justify-content:space-between;">
+                <strong>Zamówienie #${o.orderId.substring(0, 8)}</strong>
+                <span class="badge badge-green">${o.status}</span>
+              </div>
+              <div style="font-size:0.8rem; color:var(--muted);">Z koszyka: ${o.sourceCartId.substring(0, 8)}... • Pozycji: ${o.items.length}</div>
+              <div style="margin-top:4px; font-weight:700; color:#34d399;">Kwota: ${o.totalAmount.toFixed(2)} PLN</div>
+            </div>
+          `).join('');
+        }
+      }
+    }
+
+    async function refreshAll() {
+      await Promise.all([
+        loadProducts(),
+        refreshCartAndEvents(),
+        loadOrdersAndNotifications()
+      ]);
+    }
+
+    refreshAll();
+  </script>
+</body>
+</html>
